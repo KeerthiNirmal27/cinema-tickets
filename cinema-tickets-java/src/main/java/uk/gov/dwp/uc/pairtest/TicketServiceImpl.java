@@ -24,7 +24,7 @@ public class TicketServiceImpl implements TicketService {
 
         // validation 2---------- Check TicketTypeRequest object is not null
         if(ticketTypeRequests == null && ticketTypeRequests.length==0) {
-            throw new InvalidPurchaseException("Invalid Purchase Request Parameters");
+            throw new InvalidPurchaseException("Invalid Purchase Request");
         }
 
         // validation 3---------- noOfTickets is not greater than 20
@@ -36,13 +36,12 @@ public class TicketServiceImpl implements TicketService {
         }
 
         // validation 4 ----------- Check for Adult ticket if Child or infant type exists in requestList
-        List<TicketTypeRequest.Type> reqList =  Arrays.stream(ticketTypeRequests)
-                                                        .map(TicketTypeRequest::getTicketType)
-                                                        .collect(Collectors.toList());
+        Map<TicketTypeRequest.Type, Integer> reqMap =  Arrays.stream(ticketTypeRequests)
+                                                        .collect(Collectors.groupingBy(TicketTypeRequest::getTicketType, Collectors.summingInt(TicketTypeRequest::getNoOfTickets)));
 
-        if ((reqList.contains(TicketTypeRequest.Type.CHILD) ||
-                reqList.contains(TicketTypeRequest.Type.INFANT))&&
-                !reqList.contains(TicketTypeRequest.Type.ADULT)) {
+        if ((reqMap.containsKey(TicketTypeRequest.Type.CHILD) ||
+                reqMap.containsKey(TicketTypeRequest.Type.INFANT))&&
+                !(reqMap.containsKey(TicketTypeRequest.Type.ADULT) && reqMap.get(TicketTypeRequest.Type.ADULT)>0)) {
             throw new InvalidPurchaseException("Child And Infant ticket cannot be purchased without Adult Ticket");
         }
 
@@ -51,12 +50,11 @@ public class TicketServiceImpl implements TicketService {
                         Arrays.stream(ticketTypeRequests)
                             .filter(ticketTypeRequest -> !ticketTypeRequest.getTicketType().equals(TicketTypeRequest.Type.INFANT))
                             .collect(Collectors.groupingBy(TicketTypeRequest::getTicketType, Collectors.summingInt(TicketTypeRequest::getNoOfTickets)));
-        //System.out.println(ticketRequestsForProcessing.toString());
 
         if (ticketRequestsForProcessing.size() > 0) {
             int totalAmountToPay = 0;
             int totalSeatsToAllocate = 0;
-            int ticketPricePerType;
+            int ticketPricePerType = 0;
             for (Map.Entry<TicketTypeRequest.Type, Integer> entry : ticketRequestsForProcessing.entrySet()) {
                 ticketPricePerType = getTicketPrice(entry.getKey()) * entry.getValue();
                 totalAmountToPay = totalAmountToPay + ticketPricePerType;
@@ -64,14 +62,16 @@ public class TicketServiceImpl implements TicketService {
                 totalSeatsToAllocate = totalSeatsToAllocate + entry.getValue();
             }
 
-            if (totalAmountToPay > 0)
+            if (totalAmountToPay > 0) {
                 System.out.println("totalAmountToPay : " + totalAmountToPay);
                 new TicketPaymentServiceImpl().makePayment(accountId, totalAmountToPay);
+            }
 
-            if (totalSeatsToAllocate > 0)
+            if (totalSeatsToAllocate > 0) {
                 System.out.println("Total Seats for allocation : " + totalSeatsToAllocate);
                 new SeatReservationServiceImpl().reserveSeat(accountId, totalSeatsToAllocate);
             }
+        }
 
     }
 
